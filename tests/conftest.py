@@ -6,6 +6,7 @@ MOCK_MODULES = [
     "PyQt5.QtWidgets",
     "PyQt5.QtGui",
     "PyQt5.QtCore",
+    "PIL",
     "cv2",
     "numpy",
     "win32api",
