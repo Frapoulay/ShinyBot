@@ -1,0 +1,4 @@
+sonar.organization=Frapoulay
+sonar.projectKey=frapoulay
+sonar.sources=./modules
+sonar.python.coverage.reportPaths=coverage.xml
