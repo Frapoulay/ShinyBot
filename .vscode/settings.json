@@ -1,3 +1,10 @@
 {
-    "python.analysis.extraPaths": ["./src/python"]
+    "files.autoSave": "afterDelay",
+    "terminal.integrated.defaultProfile.windows": "Command Prompt",
+    "explorer.confirmDelete": false,
+    "python.createEnvironment.trigger": "off",
+    "python.defaultInterpreterPath": "c:\\Users\\Fra\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+    "python.useEnvironmentsExtension": false,
+    "typescript.updateImportsOnFileMove.enabled": "always",
+    "explorer.confirmDragAndDrop": false
 }
