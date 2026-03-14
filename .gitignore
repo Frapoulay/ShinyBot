@@ -1,7 +1,7 @@
 # ShinyBoy exclusive
 roms/
 backup/
-src/python/data/pkl/
+src/data/pkl/
 test.png
 
 # Byte-compiled / optimized / DLL files

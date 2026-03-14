@@ -1,5 +1,3 @@
-
-
 import io
 import os
 import cv2
@@ -24,7 +22,7 @@ def getScreenshot():
         
         try:
             screenshotImage = Image.open(screenshotBytes)
-            screenshotImage.save("bizhawk.png")
+            screenshotImage.save("backup/state/bizhawk.png")
 
             # Convert RGB screenshot to BGR in order to be cv2-readable
             return cv2.cvtColor(numpy.array(screenshotImage), cv2.COLOR_RGB2BGR)

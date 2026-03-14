@@ -5,7 +5,7 @@ from itertools import chain
 import sys
 
 import modules.img as img
-from modules.data import POKEMON_NAMES
+from modules.data.species import POKEMON_NAMES
 
 SPRITE_COLUMN = 0
 NAME_COLUMN = 1

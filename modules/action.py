@@ -13,7 +13,7 @@ from modules.bag import ITEMS_SECTION, KEYITEMS_SECTION, OLDROD_ID, GOODROD_ID, 
 from modules.zone import MONTCOURONNE_SALLE8, Position
 from modules.pokemon import Pokemon
 from modules.pokedex import POKEDEX
-from modules.data import ITEM_NAMES
+from modules.data.items import ITEM_NAMES
 from modules.utils import waitFrames
 
 MENU_POKEDEX = 1

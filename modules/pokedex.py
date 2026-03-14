@@ -1,9 +1,12 @@
 
 import re
 
-from modules.data import EVOLUTIONS, POKEMON_NAMES, GBAGAME_NAMES, DANGEROUS_MOVES, MOVE_NAMES
+from modules.data.species import POKEMON_NAMES, EVOLUTIONS
+from modules.data.moves import MOVE_NAMES, DANGEROUS_MOVES
+from modules.data.gba import GBAGAME_NAMES, SAPPHIRE, RUBY, EMERALD, FIRERED, LEAFGREEN
+
 from modules.encounter import ENCOUNTERTABLES_DICT, SPECIALENCOUNTERS, SPECIALGRASSENCOUNTERS, DIAMOND_ENCOUNTERS, PEARL_ENCOUNTERS
-from modules.encounter import SAPPHIRE, RUBY, EMERALD, FIRERED, LEAFGREEN
+
 
 class PokedexEntry():
     def __init__(self, pokedexId):

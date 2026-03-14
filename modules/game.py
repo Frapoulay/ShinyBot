@@ -3,7 +3,8 @@ import modules.bag as bag
 import modules.memory as memory
 
 from modules.encounter import SPECIALGRASSENCOUNTERS
-from modules.data import POKEMON_NAMES, GBAGAME_NAMES
+from modules.data.species import POKEMON_NAMES
+from modules.data.gba import GBAGAME_NAMES
 from modules.zone import MONTCOURONNE_SALLE8, HONEYTREES_POSITIONS, Position, HoneyTree
 
 FOG_WEATHER = 14

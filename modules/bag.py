@@ -1,7 +1,7 @@
 import modules.img as img
 import modules.memory as memory
 
-from modules.data import ITEM_NAMES
+from modules.data.items import ITEM_NAMES
 
 ITEMS_SECTION = 0
 MEDECINE_SECTION = 1

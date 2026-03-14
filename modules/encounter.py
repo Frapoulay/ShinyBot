@@ -2,13 +2,8 @@
 import copy
 
 import modules.memory as memory
-from modules.data import POKEMON_NAMES, GBAGAME_NAMES
-
-SAPPHIRE = 1
-RUBY = 2
-EMERALD = 3
-FIRERED = 4
-LEAFGREEN = 5
+from modules.data.species import POKEMON_NAMES
+from modules.data.gba import GBAGAME_NAMES
 
 JARDINTROPHEE_ID = 287
 GRANDMARAIS_PARC1_ID = 504
