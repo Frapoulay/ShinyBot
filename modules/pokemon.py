@@ -2,6 +2,12 @@ from modules.utils import formatNumber
 from modules.utils import getShinyValue
 from modules.bag import Item
 
+from modules.data.abilities import ABILITY_LIST
+from modules.data.moves import MOVE_NAMES
+from modules.data.natures import NATURE_LIST
+from modules.data.species import POKEMON_NAMES
+from modules.data.items import ITEM_NAMES
+
 import modules.data as data
 import modules.memory as memory
 
@@ -13,7 +19,7 @@ DEFOG_ID = 432
 class Move:
     def __init__(self, id, PP, PPUp):
         self.id = id
-        self.name = data.MOVE_NAMES[id]
+        self.name = MOVE_NAMES[id]
         self.PP = PP
         self.PPUp = PPUp
     
@@ -23,12 +29,12 @@ class Move:
 class Ability:
     def __init__(self, id):
         self.id = id
-        self.name = data.ABILITY_LIST[id]
+        self.name = ABILITY_LIST[id]
 
 class Nature:
     def __init__(self, id):
         self.id = id
-        self.name = data.NATURE_LIST[id]
+        self.name = NATURE_LIST[id]
 
 class Contest:
     def __init__(self, cool, beauty, cute, smart, tough, sheen):
@@ -100,7 +106,7 @@ class Pokemon:
         try:
             self.pid = pid
             self.pokedexId = pokedexId
-            self.name = data.POKEMON_NAMES[pokedexId]
+            self.name = POKEMON_NAMES[pokedexId]
             self.level = level
             self.moves = [Move(**jsonMove) for jsonMove in moves]
             self.ability = Ability(abilityId)
@@ -147,7 +153,7 @@ class Pokemon:
         
     def __str__(self):
         return (str(self.name) + " " + ("♀" if self.female else "♂")
-                + " level " + str(self.level) + " (" + self.ability.name + " - " + self.nature.name + ")" + " - PID = " + str(hex(self.pid)) + (" - Held Item : " + data.ITEM_NAMES[self.item] if self.item else "") + " - Shiny value : " + str(self.shinyValue)  + "\n"
+                + " level " + str(self.level) + " (" + self.ability.name + " - " + self.nature.name + ")" + " - PID = " + str(hex(self.pid)) + (" - Held Item : " + ITEM_NAMES[self.item] if self.item else "") + " - Shiny value : " + str(self.shinyValue)  + "\n"
                 + " - " + self.moves[0].name + " (" + str(self.moves[0].PP) + ")\n"
                 + (" - " + self.moves[1].name + " (" + str(self.moves[1].PP) + ")\n" if len(self.moves) >= 2 else "")
                 + (" - " + self.moves[2].name + " (" + str(self.moves[2].PP) + ")\n" if len(self.moves) >= 3 else "")
@@ -212,7 +218,7 @@ def isHMAvailable(hmId):
                         return [pokemonPosition, movePosition]
     
     # No Pokemon with Fly
-    print("No Pokemon with HM " + data.MOVE_NAMES[hmId] + " !")
+    print("No Pokemon with HM " + MOVE_NAMES[hmId] + " !")
     return [None, None]
 
 HM_LIST = [
