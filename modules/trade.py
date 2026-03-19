@@ -11,7 +11,7 @@ import modules.emukeyboard as emukeyboard
 
 from modules.utils import waitFrames
 from modules.img import BOTTOMSCREEN, TOPSCREEN, BackgroundTemplate
-from modules.emu import BIZHAWK, MELONDS, Window
+from modules.emu import BACKUP_LOCATION, BIZHAWK, MELONDS, Window
 
 SPECIFIC = types.SimpleNamespace()
 SPECIFIC.LOAD_GAME = 1
@@ -221,10 +221,10 @@ class Trade():
 
         # Restore backup saves for both instances on BizHawk and MelonDS so we can skip initTrade
         if (self.originalSave[self.mainGame]):
-            BIZHAWK.restoreBackupFile(self.mainGame, self.originalSave[self.mainGame])
+            BIZHAWK.restoreBackupFile(self.mainGame, BACKUP_LOCATION + self.originalSave[self.mainGame])
         
         if (self.originalSave[self.secondaryGame]):
-            BIZHAWK.restoreBackupFile(self.secondaryGame, self.originalSave[self.secondaryGame])
+            BIZHAWK.restoreBackupFile(self.secondaryGame, BACKUP_LOCATION + self.originalSave[self.secondaryGame])
 
         MELONDS.importSaveFile(self.mainGame)
         MELONDS.importSaveFile(self.secondaryGame, secondaryExtension = True)

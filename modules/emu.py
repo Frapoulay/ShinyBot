@@ -446,7 +446,7 @@ class Emulator():
     ######################################################################
     def launchEmu(self, pokemonGameVersion, firstInstance = None):
         try:
-            process = subprocess.Popen("../../Drive/Shared/Programmes/" + self.name + "/" + self.executableName + " roms/PokemonVersion" + pokemonGameVersion + ".nds")
+            process = subprocess.Popen("../../Programmes/" + self.name + "/" + self.executableName + " roms/PokemonVersion" + pokemonGameVersion + ".nds")
         except OSError as e:
             print(f"Error: {e}")
             exit(1)
@@ -463,7 +463,7 @@ class Emulator():
     # Close all instances if they exist #
     #####################################
     def closeAllWindows(self):
-        for window in (self.mainWindow, self.secondaryWindow, self.luaScriptWindow):
+        for window in ((self.mainWindow, self.secondaryWindow, self.luaScriptWindow) + tuple(self.findEmuWindowByTitle(self.name))):
             try:
                 window.closeWindow() if window else None
             except:
@@ -538,14 +538,11 @@ class Emulator():
     ####################################################################
     # Replace old save file by a new save file from the other emulator #
     ####################################################################
-    def restoreBackupFile(self, pokemonGame, backupFilename):
+    def restoreBackupFile(self, pokemonGame, backupFile):
 
         # Retrieve SaveRAM file and replace it by the backup file
         if (self == BIZHAWK):
-            saveRamFile = SAVERAM_LOCATION + SAVENAMES[pokemonGame]
-            backupFile = BACKUP_LOCATION + backupFilename
-
-            replaceFile(saveRamFile, backupFile)
+            replaceFile(SAVERAM_LOCATION + SAVENAMES[pokemonGame], backupFile)
         else:
             print("Only restore BizHawk save files")
 
