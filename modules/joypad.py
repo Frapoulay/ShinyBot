@@ -64,6 +64,7 @@ def writePathfindingInput(nodeList, destroyedObstacles = []):
         nodeId = 1
         stopped = True
         previousNode = nodeList[0]
+        node = None
 
         # Use bike as much as possible
         playerData = player.getPlayerData()
@@ -77,7 +78,7 @@ def writePathfindingInput(nodeList, destroyedObstacles = []):
         frameByFrameInputSequence = ""
         skipTwoNodes = False
         skipNode = False
-
+        
         # Not on bike and should be : press Y to use bike
         if (previousNode.canBike() and not isOnBike):
             frameByFrameInputSequence += 5 * "Y" + 10 * "@"
@@ -89,7 +90,7 @@ def writePathfindingInput(nodeList, destroyedObstacles = []):
         if (isOnBike and playerData.bikeSpeed == player.HIGH_BIKESPEED):
             frameByFrameInputSequence += "BB"
 
-        runSectionStart = -1 if isOnBike else 0
+        runSectionStart = -1 if isOnBike or previousNode.isSurfing else 0
         runSections = ""
 
         # Start the path
@@ -307,8 +308,9 @@ def writePathfindingInput(nodeList, destroyedObstacles = []):
                 # Stop running and use bike
                 runSections += ("/" if runSections else "") + str(runSectionStart) + "-" + str(len(frameByFrameInputSequence))
                 runSectionStart = -1
-                frameByFrameInputSequence += (12 * "@"            # Release direction to stop running
-                                            + 5 * "Y" + 10 * "@") # Get on the bike
+                frameByFrameInputSequence += (12 * "@"           # Release direction to stop running
+                                            + 5 * "Y" + 10 * "@" # Get on the bike
+                                            + "BB" * (playerData.bikeSpeed == player.HIGH_BIKESPEED)) # Decrease speed if needed
                 
                 # Start moving again to reach actual cell position
                 isOnBike = True
@@ -316,7 +318,7 @@ def writePathfindingInput(nodeList, destroyedObstacles = []):
 
             # Regular cell
             else:
-                frameByFrameInputSequence += getInputsToProgressCell(isOnBike, previousNode.cellType, stopped, inputButton, playerDirection)
+                frameByFrameInputSequence += getInputsToProgressCell(isOnBike, previousNode.cellType, stopped, inputButton, playerDirection) + ("@" if nodeId > 0 and nodeId % 12 == 0 else "")
                 stopped = False # Start moving
 
             # New direction is the input we pressed to get there
@@ -334,10 +336,14 @@ def writePathfindingInput(nodeList, destroyedObstacles = []):
                 previousNode = node
                 nodeId += 1
 
-        print(frameByFrameInputSequence)
-
         if (runSectionStart != -1):
             runSections += ("/" if runSections else "") + str(runSectionStart) + "-" + str(len(frameByFrameInputSequence))
+
+        # If last cell is a Door, repeat last input to be sure to interact with it
+        if (node and node.cellType == "Z"):
+            frameByFrameInputSequence += 4 * frameByFrameInputSequence[-1]
+
+        print(frameByFrameInputSequence)
 
         # Write input sequence
         memory.writeMemoryData("joypad", frameByFrameInputSequence)
