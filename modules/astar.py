@@ -62,7 +62,7 @@ SOLID_BLOCKS = [
     "P", # Post (Special process since it displays a message if coming from the bottom)
     "I", # Interactable (Static encounter, Shop, etc)
     "H", # Honey Tree
-    "b", # Boulder (Cannot be removed like Cut or Rock Smash, so is actually an obsctacle)
+    "b", # Boulder (Cannot be removed like Cut or Rock Smash, so is actually an obstacle)
     "v", # Bike ramp
 ]
 
@@ -200,7 +200,6 @@ def getMostEfficientPath(start: Position, end: Position, gameName, repelActive =
         playerPosition = blockingBoulders[0][PLAYER_POSITION]
         boulderPosition = blockingBoulders[0][BOULDER_POSITION]
         bouldersToPush = [(playerPosition, boulderPosition)]
-        pushCounter = 0
 
         # Operations will depend on the player and boulders positions
         xDiff = boulderPosition.X - playerPosition.X
@@ -215,7 +214,6 @@ def getMostEfficientPath(start: Position, end: Position, gameName, repelActive =
             # Push the boulder in the direction the player is facing
             updatedBoulder = Position(boulderPosition.X + xDiff, boulderPosition.Y + yDiff, boulderPosition.zone)
             updatedPlayer = Position(playerPosition.X + xDiff, playerPosition.Y + yDiff, playerPosition.zone)
-            pushCounter += 1
 
             # Update the map to take into account the pushed boulder
             updateMapWithPushedBoulders(newMap, boulderPosition, playerPosition)
@@ -234,7 +232,7 @@ def getMostEfficientPath(start: Position, end: Position, gameName, repelActive =
                 previousPosition = start
 
                 for boulder in bouldersToPush:
-
+ 
                     # Go from previous position to boulder pushing position
                     pathToPlayerPosition = astarAlgorithm(previousPosition, boulder[PLAYER_POSITION], gameName, repelActive, newMap, maxCost = maxCost, parentNode = boulderPath[-1])[0]
                     lastNode = pathToPlayerPosition[-1]
@@ -245,6 +243,7 @@ def getMostEfficientPath(start: Position, end: Position, gameName, repelActive =
                     # Go from boulder pushing position to boulder position while pushing it
                     pushingBoulder = Node(boulder[BOULDER_POSITION], newMap, lastNode)
                     pushingBoulder.pushBoulder = True
+                    pushingBoulder.g = lastNode.g + CELL_COST["O"]
                     pathToPlayerPosition.append(pushingBoulder)
 
                     # Update the map to take into account the pushed boulder
@@ -299,6 +298,10 @@ def astarAlgorithm(start: Position, end: Position, gameName, repelActive, zoneMa
     # Create start and end node
     start_node = Node(start, zoneMap)
     end_node = Node(end, zoneMap)
+
+    # If extending an existing path, retrieve its cost
+    if (parentNode):
+        start_node.g = parentNode.g
 
     # If provided, add isBelow and isAbove status (help to differentiate if starting on a a/A cell) 
     if (isBelow is not None):
