@@ -165,7 +165,7 @@ class Node():
 #########################################################################################################
 # Find best possible path between two points in the same zone, while trying to push boulders if needeed #
 #########################################################################################################
-def getMostEfficientPath(start: Position, end: Position, repelActive, zoneMap = None, isBelow = None, maxCost = None):
+def getMostEfficientPath(start: Position, end: Position, gameName, repelActive = False, zoneMap = None, isBelow = None, maxCost = None):
     
     # Log pathfinding calculation time
     startTime = time.time()
@@ -183,7 +183,7 @@ def getMostEfficientPath(start: Position, end: Position, repelActive, zoneMap = 
         return None
 
     # Boulders might block the way, we'll track them and process them if needed
-    possiblePath, blockingBoulders = astarAlgorithm(start, end, repelActive, zoneMap, isBelow, maxCost)
+    possiblePath, blockingBoulders = astarAlgorithm(start, end, gameName, repelActive, zoneMap, isBelow, maxCost)
 
     # No path found, checking for boulders
     if (not possiblePath and len(blockingBoulders) > 0):
@@ -192,8 +192,7 @@ def getMostEfficientPath(start: Position, end: Position, repelActive, zoneMap = 
         boulderFreeMap = removeAllBoulders(zoneMap)
 
         # No point in pushing boulders if no path can be found on a boulder-free map
-        if (not astarAlgorithm(start, end, repelActive, boulderFreeMap, isBelow, maxCost)[0]):
-            # print("No path even without boulders, we definetly can't find a path")
+        if (not astarAlgorithm(start, end, gameName, repelActive, boulderFreeMap, isBelow, maxCost)[0]):
             return None
 
         # Push the boulders close to endPosition first
@@ -222,11 +221,10 @@ def getMostEfficientPath(start: Position, end: Position, repelActive, zoneMap = 
             updateMapWithPushedBoulders(newMap, boulderPosition, playerPosition)
 
             # Try to find a way now that the boulder has been pushed
-            possiblePath, newBlockingBoulders = astarAlgorithm(playerPosition, end, repelActive, newMap, maxCost = maxCost)
+            possiblePath, newBlockingBoulders = astarAlgorithm(playerPosition, end, gameName, repelActive, newMap, maxCost = maxCost)
 
             # A path has been found, return it
             if (possiblePath):
-                # print("Found a path after pushing " + str(pushCounter) + " boulders !")
 
                 # Create a new map and update it everytime a boulder is pushed
                 newMap = zoneMap[:]
@@ -238,7 +236,7 @@ def getMostEfficientPath(start: Position, end: Position, repelActive, zoneMap = 
                 for boulder in bouldersToPush:
 
                     # Go from previous position to boulder pushing position
-                    pathToPlayerPosition = astarAlgorithm(previousPosition, boulder[PLAYER_POSITION], repelActive, newMap,  maxCost = maxCost)[0]
+                    pathToPlayerPosition = astarAlgorithm(previousPosition, boulder[PLAYER_POSITION], gameName, repelActive, newMap, maxCost = maxCost, parentNode = boulderPath[-1])[0]
                     lastNode = pathToPlayerPosition[-1]
 
                     # Remove start node to link it to the previous path
@@ -257,16 +255,15 @@ def getMostEfficientPath(start: Position, end: Position, repelActive, zoneMap = 
                     previousPosition = boulder[BOULDER_POSITION]
 
                 # Go from last boulder to end, remove last boulder node to link it to the previous path
-                pathToEnd = astarAlgorithm(previousPosition, end, repelActive, newMap, maxCost = maxCost)[0]
+                pathToEnd = astarAlgorithm(previousPosition, end, gameName, repelActive, newMap, maxCost = maxCost, parentNode = boulderPath[-1])[0]
                 pathToEnd.pop(0)
                 boulderPath.extend(pathToEnd)
 
-                print("Get most effective path (with boulders) from " + str(start) + " to " + str(end) + " (" + zoneMap[end.Y][end.X] + ") : " + str(round(time.time() - startTime,2)) + " seconds")
+                # Return complete path
                 return boulderPath
 
             # No path has been found but boulder can still be pushed, keep trying
             elif ((updatedPlayer, updatedBoulder) in newBlockingBoulders):
-                # print("Still pushing the boulder... " + str(updatedBoulder))
                 playerPosition = updatedPlayer
                 boulderPosition = updatedBoulder
                 bouldersToPush.append((playerPosition, boulderPosition))
@@ -274,7 +271,6 @@ def getMostEfficientPath(start: Position, end: Position, repelActive, zoneMap = 
             # Boulder has been pushed all the way and still no path found
             # Try another boulder but keep the same map
             elif (len(newBlockingBoulders) > 0):
-                # print("Cannot push the boulder anymore, trying another boulder")
 
                 # Push the boulders close to endPosition first
                 newBlockingBoulders = sortBoulders(newBlockingBoulders, end)
@@ -287,17 +283,15 @@ def getMostEfficientPath(start: Position, end: Position, repelActive, zoneMap = 
 
             # No boulder left to push and no path found
             else:
-                # print("Cannot push the boulder anymore, we definetly can't find a path")
                 return None
     else:
-        print("Get most effective path from " + str(start) + " to " + str(end) + " (" + zoneMap[end.Y][end.X] + ") : " + str(round(time.time() - startTime,2)) + " seconds")
         return possiblePath
 
 
 #######################################################################################
 # Use A* algorithm to find most efficient path between two positions in the same zone #
 #######################################################################################
-def astarAlgorithm(start: Position, end: Position, repelActive, zoneMap,  isBelow = None, maxCost = None):
+def astarAlgorithm(start: Position, end: Position, gameName, repelActive, zoneMap, isBelow = None, maxCost = None, parentNode = None):
 
     # Boulders might block the way, we'll track them and process them if needed
     blockingBoulders = []
@@ -438,7 +432,7 @@ def astarAlgorithm(start: Position, end: Position, repelActive, zoneMap,  isBelo
             cellCost = CELL_COST.get(child.cellType, 999)
 
             # Surfing is twice as slow in Diamond/Pearl
-            if (child.cellType in ["W","d"] and BIZHAWK.mainWindow.gameName != PLATINE):
+            if (child.cellType in ["W","d"] and gameName != PLATINE):
                 cellCost *= 2
 
             # If surfing, reduce water cells cost and increase the rest

@@ -31,7 +31,7 @@ DOOR_GRAPH = {}
 # Proxy method to add gameData parameters before calling astar method #
 #######################################################################
 def getMostEfficientPath(start: Position, end: Position, zoneMap = None, isBelow = None, maxCost = None):
-    return astar.getMostEfficientPath(start, end, game.getGameData().repelSteps > 0, zoneMap, isBelow, maxCost)
+    return astar.getMostEfficientPath(start, end, BIZHAWK.mainWindow.gameName, game.getGameData().repelSteps > 0, zoneMap, isBelow, maxCost)
 
 
 
@@ -281,7 +281,7 @@ def initDoorGraph():
     }
 
     # Create a graph for Diamond/Pearl and another for Platinum
-    for gameCode in ["PL","DP"]:
+    for gameCode, gameName in {"PL": "Platine", "DP": "Diamant/Perle"}.items():
 
         # Iterate on every single Door
         for zoneObject in set(zone.ZONEDICTIONARY[gameCode].values()):
@@ -301,7 +301,7 @@ def initDoorGraph():
                         continue
 
                     # Calculate A* path from each door to its neigbours 
-                    doorPath = getMostEfficientPath(door.connectedDoor.destination, otherDoorInZone.position)
+                    doorPath = astar.getMostEfficientPath(door.connectedDoor.destination, otherDoorInZone.position, gameName)
 
                     # Only add the door path if there's an actual path
                     if (doorPath):
@@ -804,7 +804,7 @@ def getPlayerDistance(playerPath, destination, closestDoor, closestPositionDoor,
         lastSubpathDoor = closestPositionDoor
 
         # Check if any of the doors before closestDoor can reach the destination
-        for doorId in range(0, len(dijsktraPlayerPath)):
+        for doorId in range(len(dijsktraPlayerPath)):
 
             # Check if we can directly reach destination from there
             playerPath.finalPath = getMostEfficientPath(lastSubpathDoor.destination, destination)

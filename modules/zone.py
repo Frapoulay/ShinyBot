@@ -125,14 +125,22 @@ class Position:
         if isinstance(zone, Zone):
             self.zone = zone
 
-        # Provide Zone ID, search for the Zone object in ZONEDICTIONARY
-        elif (isinstance(zone, int) and zone in ZONEDICTIONARY[BIZHAWK.mainWindow.getGameCode()]):
-            self.zone = ZONEDICTIONARY[BIZHAWK.mainWindow.getGameCode()][zone]
-
-        # Not Zone object nor known ZoneID
+        # Other object providedn find zone in ZONEDICTIONARY from zoneId
         else:
-            self.zone = None
-            print("Unknown zone : " + str(zone))
+            gameCode = BIZHAWK.mainWindow.getGameCode() if BIZHAWK.mainWindow else "PL"
+
+            # Provide integer ZoneId, directly search in ZONEDICTIONARY
+            if (isinstance(zone, int) and zone in ZONEDICTIONARY[gameCode]):
+                self.zone = ZONEDICTIONARY[gameCode][zone]
+
+            # Provide SubZone object, search in ZONEDICTIONARY from SubZoneId
+            elif (isinstance(zone, SubZone) and zone.zoneId in ZONEDICTIONARY[gameCode]):
+                self.zone = ZONEDICTIONARY[gameCode][zone.zoneId]
+
+            # Not Zone object nor known ZoneID
+            else:
+                self.zone = None
+                print("Unknown zone : " + str(zone))
 
     def getCell(self):
         return self.zone.map[self.Y][self.X]
