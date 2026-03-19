@@ -160,7 +160,7 @@ def checkPathIsFollowed(path: list[Node]):
                         # Found a new valid wild Pokémon PID : let battle logic take over
                         if (jsonPokemonData.get("pid",0) not in (0,lastWildPID) and Pokemon(**jsonPokemonData).isValid):
                             inBattle = True
-                    break
+                            break
 
                         waitFrames(1)
 
@@ -212,8 +212,12 @@ def writePathInputsFromCurrentState(nodeList, breakNodeId):
 
     print("Wrong path ! Start again from " + str(playerData.position))
 
+    # Default : check the next 5 nodes to check where to restart path
+    numberOfCloseNodes = 5
+
     # If we need a new path while on a bike slope, start the go-up-the-slope sequence again
     while (breakNodeId >= 0 and nodeList[breakNodeId].onABikeSlope):
+        numberOfCloseNodes = 1
         breakNodeId -= 1
 
     # Split the original nodeList into processed and remaining nodes
@@ -223,18 +227,40 @@ def writePathInputsFromCurrentState(nodeList, breakNodeId):
     # Update the map to take into account the pushed boulder and destroyed obstacles
     updatedMap, destroyedObstacles = astar.getMapAtCurrentState(processedNodes, nodeList[0].position.zone.map)
 
+    # Retrieve 5 next nodes (or 1 if on a bike slope)
+    nextNodes = remainingNodes[:numberOfCloseNodes]   
+    
+    # Default starting node : very next on the path
+    adjustedPath = getMostEfficientPath(playerData.position, nextNodes[0].position, updatedMap, isBelow)
+    minimumCost = adjustedPath[-1].g + (nextNodes[-1].g - nextNodes[0].g)
+    closerNodeId = 0
+
+    # Iterate on the next 5 nodes and check from which is more optimal to restart path
+    for nodeId in range(1, len(nextNodes)):
+
+        # If we need to push a boulder to progress, restart from earlier cell
+        if (nextNodes[nodeId].pushBoulder):
+            break
+
+        # Generate path from current position to one of the next cells
+        nodeList = getMostEfficientPath(playerData.position, nextNodes[nodeId].position, updatedMap, isBelow)
+
+        if (nodeList):
+            nodeCost = nodeList[-1].g + (nextNodes[-1].g - nextNodes[nodeId].g)
+
+            if (nodeCost < minimumCost):
+                minimumCost = nodeCost
+                closerNodeId = nodeId
+                adjustedPath = nodeList
+
     # Go from player position to first node of the remaining nodes
-    firstNode = remainingNodes.pop(0)
-    nodeList = getMostEfficientPath(playerData.position, firstNode.position, updatedMap, isBelow)
-    nodeList.extend(remainingNodes)
+    nodeList = adjustedPath
+    nodeList.extend(remainingNodes[(closerNodeId + 1):])
 
     # Retrieve all inputs needed to go to specified location
     joypad.writePathfindingInput(nodeList, destroyedObstacles)
 
     return nodeList
-
-
-
 
 
 
@@ -370,14 +396,15 @@ def goToWorldLocation(location, skipFlying = False):
         # Process generated path
         correctPath = processWorldPath(completePath, location.destination if isinstance(location, Door) else None)
 
+    # Return whole path
+    return correctPath
 
 
-################################################################################
-# Convert all paths to Node paths and follow them until we reached destination #
-################################################################################
-def processWorldPath(worldPath, endPosition, calculateScore = False):
+###################################################
+# Convert World Path (door-to-door) to Node paths #
+###################################################
+def convertToNodeList(worldPath):
     completeNodePath = []
-    lastDoors = []
 
     # Each subpath can be either a door-to-door or a node-no-node path
     for subPath in worldPath:
@@ -386,25 +413,33 @@ def processWorldPath(worldPath, endPosition, calculateScore = False):
             pathList = []
             firstElement = subPath[0]
             
-            # Node-to-node path
+            # Node-to-node path, already under correct format
             if (isinstance(firstElement, Node)):
                 pathList = [subPath]
 
-            # Door-to-door path
+            # Door-to-door path, convert to multiple node-to-node lists
             elif (isinstance(firstElement, DoorKey)):
                 pathList = getPathFromGraph(subPath)
 
-            # Add each door in a list to later retrieve transition time between zones
-            for path in pathList:
-                lastPosition = path[-1].position
-                lastDoors.append(lastPosition.zone.getDoorByPosition(lastPosition))
-
             completeNodePath += pathList
 
-    # If we just want to calculate path score, we can return the path without processing it
+    return completeNodePath
+
+
+
+################################################################################
+# Convert all paths to Node paths and follow them until we reached destination #
+################################################################################
+def processWorldPath(worldPath, endPosition, calculateScore = False):
+    
+    # Convert world path to node-to-node path
+    completeNodePath = convertToNodeList(worldPath)
+    pathCost = sum(nodeList[-1].g for nodeList in completeNodePath)
+
+    # If we just want to calculate path score, we can return it without processing the path
     if (calculateScore):
-        return completeNodePath
- 
+        return pathCost
+
     # Process every subpath between each doors
     for pathId in range(len(completeNodePath)):
 
@@ -452,12 +487,15 @@ def processWorldPath(worldPath, endPosition, calculateScore = False):
             while (not img.poketch.isOnScreen()):
                 waitFrames(1)
 
+            # Retrieve door object to get transition time
+            lastNodePosition = currentPath[-1].position
+            lastDoor = lastNodePosition.zone.getDoorByPosition(lastNodePosition)
+
             # Moving from door to actual end position, wait for walking animation to be over
-            print("Wait " + str(lastDoors[pathId].transitionTime) + " frames")
-            waitFrames(lastDoors[pathId].transitionTime)
+            waitFrames(lastDoor.transitionTime)
 
     # Reached the final position
-    return True
+    return completeNodePath
 
 
 ####################################################################
@@ -823,12 +861,12 @@ def getPlayerDistance(playerPath, destination, closestDoor, closestPositionDoor,
         # Only one door : skip dijsktraPlayerPath
         if (len(dijsktraPlayerPath) == 1):
             playerPath.dijsktraDistance = pathToDoor[-1].g
-            playerPath.dijsktraPath = [pathToDoor] + [playerPath.finalPath]
+            playerPath.dijsktraPath = [pathToDoor]
 
         # Need to go through at least two doors : keep dijsktraPlayerPath
         else:
             playerPath.dijsktraDistance = pathToDoor[-1].g + distancesFromPlayer[lastSubpathDoor.createDoorKey()]
-            playerPath.dijsktraPath = [pathToDoor] + [dijsktraPlayerPath] + [playerPath.finalPath]
+            playerPath.dijsktraPath = [pathToDoor] + [dijsktraPlayerPath]
 
 
 #############################################
@@ -846,7 +884,7 @@ def getClosestDoor(location: Position):
 
         # Get the path from the nearest door
         if (door.connectedDoor.destination):
-        doorPath = getMostEfficientPath(door.connectedDoor.destination, location, maxCost = doorCost)
+            doorPath = getMostEfficientPath(door.connectedDoor.destination, location, maxCost = doorCost)
 
         # If a second path has been found with maxCost on, return it, if not the currentClosestDoor is the better option
         if (currentClosestDoor):

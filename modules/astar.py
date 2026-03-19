@@ -2,8 +2,6 @@ from modules.zone import Position
 from modules.emu import BIZHAWK, PLATINE
 import modules.zone as zone
 
-import time
-
 # Credits for A* algorithm implementation :
 # - Python Implementation : https://medium.com/@nicholas.w.swift/easy-a-star-pathfinding-7e6689c7f7b2
 # - Improving Heuristics calculation : https://theory.stanford.edu/~amitp/GameProgramming/Heuristics.html
@@ -166,9 +164,6 @@ class Node():
 # Find best possible path between two points in the same zone, while trying to push boulders if needeed #
 #########################################################################################################
 def getMostEfficientPath(start: Position, end: Position, gameName, repelActive = False, zoneMap = None, isBelow = None, maxCost = None):
-    
-    # Log pathfinding calculation time
-    startTime = time.time()
 
     # Default : if not provided, zone map is end position zone map
     if (zoneMap is None):
@@ -285,6 +280,7 @@ def getMostEfficientPath(start: Position, end: Position, gameName, repelActive =
                 return None
     else:
         return possiblePath
+
 
 
 #######################################################################################
