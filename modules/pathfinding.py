@@ -5,6 +5,7 @@ from modules.pokemon import Pokemon
 from modules.bag import BIKE_ID
 from modules.emu import BIZHAWK
 
+import copy
 import heapq
 
 import modules.img as img
@@ -51,13 +52,14 @@ def processPath(nodeList):
 ##############################################################################
 # Make sure the player is following the provided path, and correct if needed #
 ##############################################################################
-def checkPathIsFollowed(path):
+def checkPathIsFollowed(path: list[Node]):
 
     # We might bump into walls or moving NPCs, ecounter wild Pokémon, etc
     # So we need to make sure the player follows the right path
     #
     # Only stop path processing when all inputs have been pressed and the player is at desired location
 
+    nodeList = copy.deepcopy(path)
     gameData = game.getGameData()
     playerPosition = player.getPlayerData().position
 
@@ -69,7 +71,7 @@ def checkPathIsFollowed(path):
     while True:
 
         # Check current path state every frame
-        while memory.readJoypadData() or playerPosition != path[-1].position:
+        while memory.readJoypadData() or playerPosition != nodeList[-1].position:
 
             # Don't check memory more than once a frame to avoid overloading the CPU
             waitFrames(1)
@@ -101,28 +103,27 @@ def checkPathIsFollowed(path):
                 break
 
             # Reached the end or went to another zone, clear all inputs and go back to main loop
-            elif (playerPosition == path[-1].position or playerPosition.zone.zoneId != path[-1].position.zone.zoneId):
+            elif (playerPosition == nodeList[-1].position or playerPosition.zone.zoneId != nodeList[-1].position.zone.zoneId):
                 memory.clearJoypadInputs() # Clear input
                 return
 
             # Check character progression through the path
-            elif (path[pathIndex].position != playerPosition):
+            elif (nodeList[pathIndex].position != playerPosition):
 
                 # Normal behavior : character went to next position
-                if (path[pathIndex + 1].position == playerPosition):
+                if (playerPosition == nodeList[pathIndex + 1].position):
                     pathIndex += 1
 
                 # Specific case : we don't keep track of Rock Climb positions, false positive
-                elif (playerPosition.zone.map[playerPosition.Y][playerPosition.X] == "C"):
+                elif (playerPosition.getCell() == "C"):
                     continue
 
                 # Specific case : Waterfall position is skipped, false positive
-                elif (path[pathIndex + 1].cellType == "w"):
+                elif (nodeList[pathIndex + 1].cellType == "w"):
                     pathIndex += 1
-                    continue
 
                 # We could be at a different position because we're in a different zone, go back to main loop
-                elif (path[pathIndex].position.zone != playerPosition.zone):
+                elif (playerPosition.zone != nodeList[pathIndex].position.zone):
                     return
 
                 # Wrong path : recalculate from current position
@@ -140,15 +141,32 @@ def checkPathIsFollowed(path):
                 waitFrames(15) # Wait 15 frames (time needed to completely stop)
                 playerPosition = player.getPlayerData().position
 
-                # Poketch not visible, we changed zone, go back to main loop
-                if (not img.poketch.isOnScreen()):
-                    return
                 # Reached the end, go back to main loop
-                elif (playerPosition == path[-1].position):
+                if (playerPosition == nodeList[-1].position):
                     return
-                # Not at the desired location, calculate path from this position to the rest of the correct path
+
+                # Not at the final position but no inputs left to process : compare state for 300 frames
                 else:
+                    inBattle = False
+
+                    for _ in range(300):
+                        playerPosition = player.getPlayerData().position
+                        jsonPokemonData = memory.readWildPokemonData()
+
+                        # Reached different zone, go back to main loop
+                        if (playerPosition.zone != nodeList[pathIndex].position.zone):
+                            return
+
+                        # Found a new valid wild Pokémon PID : let battle logic take over
+                        if (jsonPokemonData.get("pid",0) not in (0,lastWildPID) and Pokemon(**jsonPokemonData).isValid):
+                            inBattle = True
                     break
+
+                        waitFrames(1)
+
+                    # Not at the desired location, calculate path from this position to the rest of the correct path
+                    if (inBattle): continue
+                    else: break
 
             # Entered a foggy area : use Defog
             elif (gameData.isFoggy):
@@ -163,8 +181,8 @@ def checkPathIsFollowed(path):
                 break
 
         # Did not rach final position : calculate path from new position to the rest of the correct path
-        if (memory.readJoypadData() or playerPosition != path[-1].position):
-            path = writePathInputsFromCurrentState(path, pathIndex + 1)
+        if (memory.readJoypadData() or playerPosition != nodeList[-1].position):
+            nodeList = writePathInputsFromCurrentState(nodeList, pathIndex + 1)
             pathIndex = 0
 
         # Reached final position : exit loop
@@ -298,24 +316,20 @@ def initDoorGraph():
 # Calculate the total cost of the path from player position to provided world location #
 ########################################################################################
 def calculateWorldPathCost(location):
-    pathCost = 0
 
     # Retrieve node-to-node complete path needed to reach location
     flyCity, completePath = generateWorldPath(location)
     completeNodePath = processWorldPath(completePath, location.destination if isinstance(location, Door) else None, calculateScore = True)
 
     # Add each node list total cost to get the whole path cost
-    for nodeList in completeNodePath:
-        pathCost += nodeList[-1].g
-
-    return pathCost
+    return sum(nodeList[-1].g for nodeList in completeNodePath)
 
 
 
 ###################################################################################
 # Retrieve the best possible path from any door to another and process the inputs #
 ###################################################################################
-def goToWorldLocation(location):
+def goToWorldLocation(location, skipFlying = False):
 
     # Keep searching until we're at the desired postion
     correctPath = False
@@ -323,7 +337,7 @@ def goToWorldLocation(location):
     while (not correctPath):
         needToDig = False
         playerPosition = player.getPlayerData().position
-        flyCity, completePath = generateWorldPath(location)
+        flyCity, completePath = generateWorldPath(location, skipFlying)
 
         # Location is too far from current player position, so we fly to a close city before
         if (flyCity):
@@ -410,7 +424,6 @@ def processWorldPath(worldPath, endPosition, calculateScore = False):
 
         # Go from starting node to ending node
         processPath(currentPath)
-        print("Path processed")
 
         # Only continue when all inputs have been processed
         while (memory.readJoypadData()):
@@ -597,7 +610,7 @@ class Path():
 #######################################################################################################
 # Choose between flying to a position or directly go to it, and return the complete node-to-node path #
 #######################################################################################################
-def generateWorldPath(location, skipAllCityProcesses = False):
+def generateWorldPath(location, skipFlying = False):
     
     # Need to go to a Position but only Door paths are pretermined, find closest Door
     if isinstance(location, Position):
@@ -659,42 +672,42 @@ def generateWorldPath(location, skipAllCityProcesses = False):
             skipAllCurrentPositionProcesses = True
     
         # Populate playerPath object by calculating final door, distance to door and distance from door
-        if (not skipAllCurrentPositionProcesses):
+        else:
             getPlayerDistance(playerPath, destination, closestDoor, closestPositionDoor, pathToDoor)
 
     # Don't fly if the destination or the city is close to our current position
     if (not skipAllCurrentPositionProcesses):
 
-        # If the destination is within 100 cells, directly go to it
+        # If the destination is within 50 cells, directly go to it
         if (playerPath.dijsktraDistance + playerPath.finalDistance < 50):
             print("If the destination is within 50 cells, directly go to it")
-            skipAllCityProcesses = True
+            skipFlying = True
 
         # If the city is within 50 cells, don't fly to it
         elif (getMostEfficientPath(playerPosition, closestCity.flyDoor.position, maxCost = 50)):
             print("Don't fly to the closest city if it is within 50 cells")
-            skipAllCityProcesses = True
+            skipFlying = True
 
 
     # Populate cityPath object by calculating final door, distance to door and distance from door
-    if (not skipAllCityProcesses and isinstance(location, Position)):
+    if (not skipFlying and isinstance(location, Position)):
         getCityDistance(cityPath, destination, closestDoor, closestCity, distancesFromCity)
     else:
         cityPath.dijsktraPath = [cityPath.dijsktraPath]
 
     # Just fly to city if the distance is 0
-    if (not skipAllCityProcesses and cityPath.dijsktraDistance + cityPath.finalDistance == 0):
+    if (not skipFlying and cityPath.dijsktraDistance + cityPath.finalDistance == 0):
         print("Just fly to city if the distance is 0")
         skipAllCurrentPositionProcesses = True
 
 
     # We'll use a distance ratio, fly if the player is too far and bike otherwise
-    if (not skipAllCityProcesses and not skipAllCurrentPositionProcesses):
+    if (not skipFlying and not skipAllCurrentPositionProcesses):
         distanceRatio = (playerPath.dijsktraDistance + playerPath.finalDistance) / (cityPath.dijsktraDistance + cityPath.finalDistance)
         print("(" + str(playerPath.dijsktraDistance) + " + " + str(playerPath.finalDistance) + ") / (" + str(cityPath.dijsktraDistance) + " + " + str(cityPath.finalDistance) + ") = " + str(distanceRatio))
 
     # Ratio is in favor of flying
-    if (not skipAllCityProcesses and (skipAllCurrentPositionProcesses or distanceRatio > 1.2)):
+    if (not skipFlying and (skipAllCurrentPositionProcesses or distanceRatio > 1.2)):
         return closestCity, cityPath.dijsktraPath + ([cityPath.finalPath] if isinstance(location, Position) else [])
 
     # Ratio is neutral or in favor of direct path, and if neutral we choose the direct path
@@ -832,6 +845,7 @@ def getClosestDoor(location: Position):
     for door in closestDoors:
 
         # Get the path from the nearest door
+        if (door.connectedDoor.destination):
         doorPath = getMostEfficientPath(door.connectedDoor.destination, location, maxCost = doorCost)
 
         # If a second path has been found with maxCost on, return it, if not the currentClosestDoor is the better option
@@ -916,4 +930,4 @@ def findClosestFlyDigZone(playerPosition: Position):
             break
 
     # Return complete path
-    return endDoor.destination, generateWorldPath(endDoor, skipAllCityProcesses = True)[1]
+    return endDoor.destination, generateWorldPath(endDoor, skipFlying = True)[1]
