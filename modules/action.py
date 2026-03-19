@@ -703,7 +703,6 @@ def battle(wildPokemon, catchAll = False):
                 # Not Shiny : click on Runaway and exit battle
                 else:
                     touchscreen.runawayButton.pressButton()
-                    return True
                 
             # Return button displayed : Bag or Pokémon menu
             elif (img.returnButton.isOnScreen(screenshot)):
