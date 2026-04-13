@@ -70,6 +70,7 @@ def writePathfindingInput(nodeList, destroyedObstacles = []):
         playerData = player.getPlayerData()
         playerDirection = playerData.orientation
         isOnBike = playerData.isOnBike
+        bikeCellCounter = 0
 
         # Use strength only if necessary
         gameData = game.getGameData()
@@ -216,60 +217,88 @@ def writePathfindingInput(nodeList, destroyedObstacles = []):
                 stopped = True
 
             # Going up a slope/ramp : need to increase bike speed and follow specific nodes
-            elif (node.onABikeSlope or node.onABikeRamp):
+            elif (node.onABikeSlope or node.rampData):
 
                 # Very first slope/ramp node, prepare variables and start input sequence
-                if (node.bikeSlopeDestination or node.bikeRampDestination):
-                    
-                    # If we're not on bike, stop running
-                    if (not isOnBike):
-                        runSections += ("/" if runSections else "") + str(runSectionStart) + "-" + str(len(frameByFrameInputSequence))
-                        runSectionStart = -1
+                if (bikeCellCounter == 0):
 
-                    bikeCellCounter = 0
-                    destination = node.bikeSlopeDestination if node.onABikeSlope else node.bikeRampDestination
-                    frameByFrameInputSequence += (getInputsToProgressCell(isOnBike, previousNode.cellType, stopped, inputButton, playerDirection) # Move as usual
-                                                    + 10 * "@" # Make sure we stopped
-                                                    + (5 * "@" + 5 * "Y" + 10 * "@" if not isOnBike else "")
-                                                    + 2 * "B") # Increase bike speed
-                    isOnBike = True
+                    # Specific case : if starting in front of the slope, start the process right away
+                    if (node.onABikeSlope and nodeId == 1):
+                        bikeCellCounter = 1
+                        destination = previousNode.bikeSlopeDestination
+                        
+                        # Increase speed if we didn't already
+                        if (frameByFrameInputSequence.endswith("BB")):
+                            frameByFrameInputSequence = frameByFrameInputSequence[:-2] # Stay on high speed
+                        else:
+                            frameByFrameInputSequence += "BB" # Increase bike speed
 
-                # Specific case : if starting in front of the slope, start the process right away
-                elif (nodeId == 1):
-                    bikeCellCounter = 1
-                    destination = previousNode.bikeSlopeDestination if node.onABikeSlope else previousNode.bikeRampDestination
-                    
-                    # Increase speed if we didn't already
-                    if (frameByFrameInputSequence[-2:] == "BB"):
-                        frameByFrameInputSequence = frameByFrameInputSequence[:-2] # Stay on high speed
+                    # Low-speed bike on ramp
+                    if (node.rampData and not node.rampData.isHighSpeed):
+                        frameByFrameInputSequence += getInputsToProgressCell(isOnBike, previousNode.cellType, stopped, inputButton, playerDirection) 
+
+                    # Default : 
                     else:
-                        frameByFrameInputSequence += "BB" # Increase bike speed
+                        # If we're not on bike, stop running
+                        if (not isOnBike):
+                            runSections += ("/" if runSections else "") + str(runSectionStart) + "-" + str(len(frameByFrameInputSequence))
+                            runSectionStart = -1
 
-                # Causes issues because bikeCellCounter can be undeclared (probably if too fast)
-                # Go to momentum cell to build up speed and go back to slope/ramp with max speed
-                if (bikeCellCounter == 1): frameByFrameInputSequence += getInputsToProgressCell(isOnBike, previousNode.cellType, True, inputButton, playerDirection)
-                elif (bikeCellCounter == 2): frameByFrameInputSequence += 12 * inputButton
-                elif (bikeCellCounter == 3): frameByFrameInputSequence += 8 * inputButton
-                elif (bikeCellCounter == 4): frameByFrameInputSequence += 6 * inputButton
-                elif (bikeCellCounter == 5): frameByFrameInputSequence += 2 * inputButton + 2 * "@" # Start slowing down
+                        if (node.onABikeSlope):
+                            destination = node.bikeSlopeDestination
+                            frameByFrameInputSequence += getInputsToProgressCell(isOnBike, previousNode.cellType, stopped, inputButton, playerDirection)
+                        else:
+                            destination = node.rampData.destinationCell
+                            bikeCellCounter = 1 if node.rampData.isHighSpeed else 0
+
+                        # Setup bike (on bike + high speed)
+                        frameByFrameInputSequence += (10 * "@" # Make sure we stopped
+                                                    + (5 * "@" + 5 * "Y" + 10 * "@" if not isOnBike else "") # Hop on bike if needed
+                                                    + 2 * "B") # Increase bike speed
+                        isOnBike = True
 
                 # Top of the slope/ramp
-                if (bikeCellCounter >= 5):
+                if (bikeCellCounter >= 1):
 
-                    # Speed is gradually building down
-                    if (bikeCellCounter == 5): frameByFrameInputSequence += (4 if node.onABikeSlope else 8) * "@"
-                    elif (bikeCellCounter == 6): frameByFrameInputSequence += (6 if node.onABikeSlope else 8) * "@"
-                    elif (bikeCellCounter == 7): frameByFrameInputSequence += (10 if node.onABikeSlope else 8) * "@"
-                    elif (bikeCellCounter == 8 and node.onABikeRamp): frameByFrameInputSequence += 6 * "@"
-                    elif (bikeCellCounter == 9 and node.onABikeRamp): frameByFrameInputSequence += 10 * "@"
-
-                    # Reached the end of the path
-                    if (node.position == destination):
-                        frameByFrameInputSequence += (6 * "@" # Make sure we stopped
-                                                      + 2 * "B") # Go back to slow speed
-                    
-                        # Prepare to start moving again
+                    # Low-speed ramp : spend 32 frames in the air and land on destination
+                    if (node.rampData and not node.rampData.isHighSpeed):
+                        frameByFrameInputSequence += 32 * inputButton
+                        bikeCellCounter = -1
                         stopped = True
+
+                    # Regular process - high-speed ramp or slope
+                    else:
+
+                        # Go to momentum cell to build up speed and go back to slope/ramp with max speed
+                        if (bikeCellCounter == 1): frameByFrameInputSequence += getInputsToProgressCell(isOnBike, previousNode.cellType, True, inputButton, playerDirection)
+                        elif (bikeCellCounter == 2): frameByFrameInputSequence += 12 * inputButton
+                        elif (bikeCellCounter == 3): frameByFrameInputSequence += 8 * inputButton
+                        elif (bikeCellCounter == 4): frameByFrameInputSequence += 4 * inputButton
+
+                        # Speed is gradually building down
+                        if (node.rampData):
+                            if (bikeCellCounter == 5): frameByFrameInputSequence += 4 * inputButton + 2 * "@"
+                            elif (bikeCellCounter == 6): frameByFrameInputSequence += 8 * "@"
+                            elif (bikeCellCounter == 7): frameByFrameInputSequence += 8 * "@"
+                            elif (bikeCellCounter == 8): frameByFrameInputSequence += 8 * "@"
+                            elif (bikeCellCounter == 9): frameByFrameInputSequence += 6 * "@"
+
+                        elif (node.onABikeSlope):
+                            if (bikeCellCounter == 5): frameByFrameInputSequence += 4 * inputButton + 6 * "@"
+                            elif (bikeCellCounter == 6): frameByFrameInputSequence += 6 * "@"
+
+                        # Reached the end of the path
+                        if (node.position == destination):
+
+                            # Only stop if we naturally slow down, continue if we hit a wall
+                            if (node.onABikeSlope and bikeCellCounter > 6 or node.rampData and bikeCellCounter > 9):
+                                stopped = True
+
+                            # Make sure we stopped and go back to slow speed bike
+                            frameByFrameInputSequence += (20 * "@" + 2 * "B")
+                        
+                            # Prepare to start moving again
+                            bikeCellCounter = -1
 
                 bikeCellCounter += 1
 

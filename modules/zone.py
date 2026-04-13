@@ -142,7 +142,9 @@ class Position:
                 self.zone = None
                 print("Unknown zone : " + str(zone))
 
-    def getCell(self):
+    def getCell(self, zoneMap = None):
+        if (zoneMap):
+            return zoneMap[self.Y][self.X]
         return self.zone.map[self.Y][self.X]
     
     def getDistanceTo(self, position):

@@ -82,7 +82,7 @@ def checkPathIsFollowed(path: list[Node]):
             jsonPokemonData = memory.readWildPokemonData()
 
             # Found a new valid wild Pokémon PID
-            if (jsonPokemonData.get("pid",0) not in (0,lastWildPID) and Pokemon(**jsonPokemonData).isValid):
+            if (jsonPokemonData and jsonPokemonData.get("pid",0) not in (0,lastWildPID) and Pokemon(**jsonPokemonData).isValid):
                 memory.clearJoypadInputs() # Clear input
 
                 # Battle wild Pokémon and save its PID
@@ -199,8 +199,8 @@ def writePathInputsFromCurrentState(nodeList, breakNodeId):
     # Get final position after player stopped moving
     playerData = player.getPlayerData()
 
-    # If on a bike slope, just wait, we'll slide down eventually
-    while (playerData.position.getCell() == "V"):
+    # If on a bike slope/ramp, just wait, we'll slide down eventually
+    while (playerData.position.getCell() in ["V","<",">"]):
         waitFrames(1)
         playerData = player.getPlayerData()
 
@@ -215,8 +215,8 @@ def writePathInputsFromCurrentState(nodeList, breakNodeId):
     # Default : check the next 5 nodes to check where to restart path
     numberOfCloseNodes = 5
 
-    # If we need a new path while on a bike slope, start the go-up-the-slope sequence again
-    while (breakNodeId >= 0 and nodeList[breakNodeId].onABikeSlope):
+    # If we need a new path while on a bike slope/ramp, start the go-up-the-slope sequence again
+    while (breakNodeId >= 0 and (nodeList[breakNodeId].onABikeSlope or nodeList[breakNodeId].rampData)):
         numberOfCloseNodes = 1
         breakNodeId -= 1
 

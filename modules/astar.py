@@ -1,3 +1,5 @@
+from modules.cell import CELL_COST, SOLID_BLOCKS
+from modules.ramp import Ramp
 from modules.zone import Position
 from modules.emu import BIZHAWK, PLATINE
 import modules.zone as zone
@@ -14,55 +16,6 @@ PUZZLE_BOULDERS = [
 
 PLAYER_POSITION = 0
 BOULDER_POSITION = 1
-
-CELL_COST = {
-    # Traveling cells
-    "O": 1, # Regular cell
-    "Z": 1, # Zone (door, cave entrance)
-    "G": 3, # Grass
-    "g": 3, # Tall grass
-    "1": 1, # 1-depth snow
-    "2": 2, # 2-depth snow
-    "3": 4, # 3-depth snow
-    "4": 8, # 4-depth snow
-    "s": 1, # Swamp
-    "S": 10, # Deep swamp
-    "m": 3, # Marsh (Grass in swamp)
-    "M": 12, # Deep marsh (Grass in deep swamp)
-    "V": 5, # Bike slope
-    "E": 1, # Elevator
-    "e": 1, # Elevator door
-
-    # HM Obstacles
-    "t": 5, # Tree
-    "r": 5, # Rock
-    "W": 5, # Water
-    "w": 7, # Waterfall
-    "C": 1, # Climb
-
-    # Height-depending cells
-    "A": 1, # Above ground (bridge)
-    "a": 1, # Above ground (bike bridge)
-    "@": 1, # Above solid block (bridge)
-    "B": 1, # Below bridge
-    "d": 5, # Below bridge on water
-
-    # Orientation-depending cells
-    "D": 3, # One-way ledge to go down
-    "L": 3, # One-way ledge to go left
-    "U": 3, # One-way ledge to go up
-    "R": 3, # One-way ledge to go right
-}
-
-SOLID_BLOCKS = [
-    "X", # Wall, Tree, etc
-    "N", # NPC
-    "P", # Post (Special process since it displays a message if coming from the bottom)
-    "I", # Interactable (Static encounter, Shop, etc)
-    "H", # Honey Tree
-    "b", # Boulder (Cannot be removed like Cut or Rock Smash, so is actually an obstacle)
-    "v", # Bike ramp
-]
 
 DIRECTIONS = [
     {"orientation": (-1, 0), "solidLedges": ["D","L","R"]}, # Up
@@ -104,8 +57,7 @@ class Node():
         self.bikeSlopeDestination = None
         self.bikeSlopeMomentumCell = None
 
-        self.onABikeRamp = False
-        self.bikeRampDestination = None
+        self.rampData: Ramp|None = None
 
         ### Special process for bridges since two above/below cells share the same X,Y position, see solid blocks processing ###
         # We avoid starting on a bridge, so on starting node we consider we're below (except on a @ cell which is impossible)
@@ -152,7 +104,7 @@ class Node():
             + (" PUSH !" if self.pushBoulder else "")
             + (" SURF !" if self.isSurfing else "")
             + (" ON A SLOPE !" + (" (destination = " + str(self.bikeSlopeDestination) + ")" if self.bikeSlopeDestination else "") if self.onABikeSlope else "")
-            + (" ON A RAMP !" + (" (destination = " + str(self.bikeRampDestination) + ")" if self.bikeRampDestination else "") if self.onABikeRamp else "")
+            + (" ON A RAMP ! (destination = " + str(self.rampData.destinationCell) + ")" if self.rampData else "")
             + "\n")
 
     def __repr__(self):
@@ -286,7 +238,7 @@ def getMostEfficientPath(start: Position, end: Position, gameName, repelActive =
 #######################################################################################
 # Use A* algorithm to find most efficient path between two positions in the same zone #
 #######################################################################################
-def astarAlgorithm(start: Position, end: Position, gameName, repelActive, zoneMap, isBelow = None, maxCost = None, parentNode = None):
+def astarAlgorithm(start: Position, end: Position, gameName, repelActive, zoneMap, isBelow = None, maxCost = None, parentNode: Node = None):
 
     # Boulders might block the way, we'll track them and process them if needed
     blockingBoulders = []
@@ -339,11 +291,11 @@ def astarAlgorithm(start: Position, end: Position, gameName, repelActive, zoneMa
                 if (current.bikeSlopeDestination and current.bikeSlopeDestination == path[-1].position):
                     path.extend(generateSlopeNodePath(current, path[-1], zoneMap))
 
-                elif (current.bikeRampDestination and current.bikeRampDestination == path[-1].position):
-                    path.extend(generateRampNodePath(current, path[-1], zoneMap))
+                elif (current.rampData and not current.rampData.processed):
+                    path.extend(generateRampNodePath(current, gameName, repelActive, zoneMap, isBelow, maxCost))
 
                 # Regular node processing
-                else:
+                else:  
                     path.append(current)
                 
                 current = current.parent
@@ -362,6 +314,7 @@ def astarAlgorithm(start: Position, end: Position, gameName, repelActive, zoneMa
             
             nextCellValue = zoneMap[node_position.Y][node_position.X]
             topCellValue = zoneMap[node_position.Y - 1][node_position.X]
+            highSpeedRamp = None
 
             # Can't walk through solid blocks
             if nextCellValue in SOLID_BLOCKS + new_position["solidLedges"]:
@@ -370,13 +323,38 @@ def astarAlgorithm(start: Position, end: Position, gameName, repelActive, zoneMa
                 if (nextCellValue == "b" and isBoulderPushable(zoneMap,current_node.position,node_position,new_position["orientation"],blockingBoulders)):
                     blockingBoulders.append((current_node.position, node_position))
 
-                # If the solid block is a bike ramp, we might be able to jump 4 cells left or right if we find 3 cells to accelerate
-                if (nextCellValue == "v" and areThreeRampCellsFree(zoneMap, current_node.position, new_position["orientation"])):
-                    node_position = findRampDestinationCell(current_node.position, new_position["orientation"][1])
+                # If the solid block is a bike ramp, we might be able to jump up
+                if (nextCellValue in ["<",">"]):
 
-                    current_node.bikeRampDestination = node_position
-                    nextCellValue = zoneMap[node_position.Y][node_position.X]
-                    topCellValue = zoneMap[node_position.Y - 1][node_position.X]
+                    # Can only jump left-oriented ramp from the right and vice-versa
+                    if (new_position["orientation"] == (1,0) or new_position["orientation"] == (-1,0)
+                        or new_position["orientation"] == (0,1) and nextCellValue == ">"
+                        or new_position["orientation"] == (0,-1) and nextCellValue == "<"):
+                        continue
+
+                    # Find high-speed destination cell (up to 4 cells left or right)
+                    highSpeedRamp = Ramp(node_position, nextCellValue, isHighSpeed = True)
+                    highSpeedRamp.findMomentumCell(zoneMap)
+
+                    # Try the low-speed bike to see if it unlocks an alternative path
+                    lowSpeedRamp = Ramp(node_position, nextCellValue, isHighSpeed = False)
+                    lowSpeedRamp.findMomentumCell(zoneMap)
+
+                    # If we can jump up the ramp with high speed, find destination cell and set it as child position
+                    if (highSpeedRamp.momentumCell):
+                        highSpeedRamp.findDestinationCell(zoneMap)
+
+                        node_position = highSpeedRamp.destinationCell
+                        nextCellValue = zoneMap[node_position.Y][node_position.X]
+                        topCellValue = zoneMap[node_position.Y - 1][node_position.X]
+
+                    # Add low-speed bike destination cell (1 cell left or right) as additional child
+                    if (lowSpeedRamp.momentumCell):
+                        lowSpeedRamp.findDestinationCell(zoneMap)
+
+                        lowSpeedNode = Node(lowSpeedRamp.destinationCell, zoneMap, current_node)
+                        lowSpeedNode.rampData = lowSpeedRamp
+                        children.append(lowSpeedNode)
 
                 # Default : don't take the node
                 else:
@@ -415,6 +393,7 @@ def astarAlgorithm(start: Position, end: Position, gameName, repelActive, zoneMa
 
             # We can walk through the block : add node to the children list
             new_node = Node(node_position, zoneMap, current_node)
+            new_node.rampData = highSpeedRamp
             children.append(new_node)
 
         # Loop through children
@@ -429,6 +408,10 @@ def astarAlgorithm(start: Position, end: Position, gameName, repelActive, zoneMa
 
             # Default cell cost is 999, basically solid block
             cellCost = CELL_COST.get(child.cellType, 999)
+
+            # Override cost if jumping from a ramp
+            if (child.rampData):
+                cellCost = 10 if child.rampData.isHighSpeed else 5
 
             # Surfing is twice as slow in Diamond/Pearl
             if (child.cellType in ["W","d"] and gameName != PLATINE):
@@ -583,9 +566,9 @@ def getRockClimbEndPosition(zoneMap, playerPosition, orientation):
 ##################################################
 def findSlopeDestinationCell(slopePosition):
     # Check for the furthest free cell up the slope 
-    if (slopePosition.zone.map[slopePosition.Y - 3][slopePosition.X] == "X"):
+    if (slopePosition.zone.map[slopePosition.Y - 3][slopePosition.X] in SOLID_BLOCKS):
         return Position(slopePosition.X, slopePosition.Y - 2, slopePosition.zone)
-    elif (slopePosition.zone.map[slopePosition.Y - 4][slopePosition.X] == "X"):
+    elif (slopePosition.zone.map[slopePosition.Y - 4][slopePosition.X] in SOLID_BLOCKS):
         return Position(slopePosition.X, slopePosition.Y - 3, slopePosition.zone)
     else:
         return Position(slopePosition.X, slopePosition.Y - 4, slopePosition.zone)
@@ -607,7 +590,7 @@ def findSlopeMomentumCell(slopePosition):
 # Generate every node needed to go up a bike slope #
 ####################################################
 def generateSlopeNodePath(slopeNode, destinationNode, zoneMap):
-        
+
     slopePath = []
     slopePath.append(slopeNode)
     slopePath.append(Node(slopeNode.bikeSlopeMomentumCell, zoneMap, slopePath[-1])) # Momentum Cell
@@ -629,55 +612,51 @@ def generateSlopeNodePath(slopeNode, destinationNode, zoneMap):
     return slopePath[::-1]
 
 
-#####################################################
-# Get final position after jumping from a bike ramp #
-#####################################################
-def findRampDestinationCell(rampPosition, orientation):
-    # Check for the furthest free cell after jumping from the ramp
-    if (rampPosition.zone.map[rampPosition.Y][rampPosition.X + 5 * orientation] == "X"):
-        return Position(rampPosition.X + 4 * orientation, rampPosition.Y, rampPosition.zone)
-    elif (rampPosition.zone.map[rampPosition.Y][rampPosition.X + 6 * orientation] == "X"):
-        return Position(rampPosition.X + 5 * orientation, rampPosition.Y, rampPosition.zone)
-    else:
-        return Position(rampPosition.X + 6 * orientation, rampPosition.Y, rampPosition.zone)
 
+#########################################
+# Link a node path to another node path #
+#########################################
+def addToNodePath(mainPath: list[Node], additionalPath: list[Node], pathCost = CELL_COST["O"]):
 
-######################################################################
-# Check if there is enough space to gain momentum before a bike ramp #
-######################################################################
-def areThreeRampCellsFree(zoneMap, currentPosition, orientation):
+    # Iterate on each node and link it to previous nodes with parent/g attributes
+    for newNode in additionalPath:
+        if (mainPath):
+            mainPath[-1].parent = newNode
+            mainPath[-1].g = newNode.g + pathCost
+        mainPath.append(newNode)
 
-    # Can only jump bike ramps if facing left or right
-    if (orientation[0] == 0):
-        # Can only jump bike ramps if we have free side cells to accelerate
-        if (orientation[1] == 1):
-            return zoneMap[currentPosition.Y][currentPosition.X-2:currentPosition.X+1] == "OOO"
-        elif (orientation[1] == -1):
-            return zoneMap[currentPosition.Y][currentPosition.X:currentPosition.X+3] == "OOO"
-        else:
-            return False
-    else:
-        return False
 
 
 #######################################################
 # Generate every node needed to jump from a bike ramp #
 #######################################################
-def generateRampNodePath(rampNode, destinationNode, zoneMap):
-    rampOrientation = -1 if destinationNode.position.X < rampNode.position.X else 1
+def generateRampNodePath(destinationNode: Node, gameName, repelActive, zoneMap, isBelow, maxCost):
+    rampData = destinationNode.rampData
+    rampData.processed = True
+    startingPosition = Position(rampData.position.X - rampData.orientation, rampData.position.Y, rampData.position.zone)
 
-    rampPath = []
-    rampPath.append(rampNode) # Start on Ramp cell
-    rampPath.append(Node(Position(rampNode.position.X - rampOrientation, rampNode.position.Y, rampNode.position.zone), zoneMap, rampPath[-1])) # Go to Momentum Cell
+    # High-speed bike : go back and forth from start to momentum cell to gain momentum
+    if (rampData.isHighSpeed):
+        rampPath = astarAlgorithm(startingPosition, rampData.momentumCell, gameName, repelActive, zoneMap, isBelow, maxCost, destinationNode)[0]
+        startingNode = rampPath.pop(0) # Remove starting position from ramp node path since it was already included in the global path
 
-    # Add nodes until we're at the destination cell
-    for i in range(-2,6):
-        rampPath.append(Node(Position(rampNode.position.X + i * rampOrientation, rampNode.position.Y, rampNode.position.zone), zoneMap, rampPath[-1]))
+        # Final node path : <path> -> momentum cell -> <path> -> starting cell
+        addToNodePath(rampPath, [rampPath[0], startingNode])
+        parentNode = rampPath[-1]
+ 
+    # Low-speed bike : starting position is already momentum cell
+    else:
+        rampPath = []
+        parentNode = destinationNode.parent
 
+    # Add remaining nodes until destination cell
+    for x in range(1, 1 + abs(rampData.destinationCell.X - startingPosition.X)):
+        pathNode = Node(Position(startingPosition.X + x * rampData.orientation, startingPosition.Y, startingPosition.zone), zoneMap, parentNode)
+        parentNode = pathNode
+        addToNodePath(rampPath, [pathNode])
+
+    # Save ramp data to all nodes in the path
     for node in rampPath:
-        node.onABikeRamp = True
-
-    destinationNode.onABikeRamp = True
-    destinationNode.parent = rampPath[-1]
+        node.rampData = rampData
 
     return rampPath[::-1]
